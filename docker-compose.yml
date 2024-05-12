@@ -1,0 +1,57 @@
+version: '3.4'
+
+services:
+  observabilitysample:
+    image: ${DOCKER_REGISTRY-}observabilitysample
+    build:
+      context: .
+      dockerfile: ObservabilitySample/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_HTTP_PORTS=8080
+    ports:
+      - "5001:8080"
+
+    volumes:
+      - ${APPDATA}/Microsoft/UserSecrets:/home/app/.microsoft/usersecrets:ro
+      - ${APPDATA}/ASP.NET/Https:/home/app/.aspnet/https:ro
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - tempo
+      - prometheus
+    volumes:
+      - "./devops/grafana/config:/etc/grafana"
+      - "./devops/grafana/dashboards:/var/lib/grafana/dashboards"
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - 9090:9090
+    volumes:
+      - "./devops/prometheus:/etc/prometheus"
+
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo
+    ports:
+      - "3200:3200"
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./devops/tempo/tempo.yaml:/etc/tempo.yaml
+
+  collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: collector
+    command: [ "--config=/etc/collector.yaml" ]
+    ports:
+      - "4317:4317" # Connection from app to grafana tempo
+    volumes:
+      - ./devops/otel/otel-collector-config.yml:/etc/collector.yaml
+    depends_on:
+      - tempo
